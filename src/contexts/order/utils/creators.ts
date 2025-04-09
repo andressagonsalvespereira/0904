@@ -2,7 +2,6 @@ import { Order, CreateOrderInput } from '@/types/order';
 import { supabase } from '@/integrations/supabase/client';
 import { convertDBOrderToOrder } from './converters';
 
-// Função createOrder (já ajustada anteriormente)
 export const createOrder = async (orderData: CreateOrderInput): Promise<Order> => {
   try {
     console.log("Starting order creation with data:", {
@@ -14,12 +13,10 @@ export const createOrder = async (orderData: CreateOrderInput): Promise<Order> =
       } : undefined
     });
 
-    // Validação básica
     if (!orderData.customer?.name?.trim()) throw new Error("Customer name is required");
     if (!orderData.customer?.email?.trim()) throw new Error("Customer email is required");
     if (!orderData.customer?.cpf?.trim()) throw new Error("Customer CPF is required");
 
-    // Verificação de duplicatas nos últimos 5 minutos
     if (orderData.customer?.email && orderData.productId) {
       const fiveMinutesAgo = new Date();
       fiveMinutesAgo.setMinutes(fiveMinutesAgo.getMinutes() - 5);
@@ -62,7 +59,6 @@ export const createOrder = async (orderData: CreateOrderInput): Promise<Order> =
       }
     }
 
-    // Conversão do productId
     const productIdNumber = typeof orderData.productId === 'string'
       ? parseInt(orderData.productId, 10)
       : Number(orderData.productId);
@@ -70,7 +66,6 @@ export const createOrder = async (orderData: CreateOrderInput): Promise<Order> =
     const deviceType = orderData.deviceType || 'desktop';
     const isDigitalProduct = orderData.isDigitalProduct || false;
 
-    // Normalização do status de pagamento
     const rawStatus = (orderData.paymentStatus || '').toString().trim().toUpperCase();
     const allowedStatuses = ['PENDING', 'PAID', 'APPROVED', 'DENIED', 'ANALYSIS', 'CANCELLED', 'CONFIRMED'];
 
@@ -98,7 +93,7 @@ export const createOrder = async (orderData: CreateOrderInput): Promise<Order> =
 
     console.log(`Payment status normalized: ${orderData.paymentStatus} → ${safeStatus}`);
 
-    const orderToInsert = {
+    const orderToInsert: Record<string, any> = {
       customer_name: orderData.customer.name,
       customer_email: orderData.customer.email,
       customer_cpf: orderData.customer.cpf,
@@ -111,22 +106,23 @@ export const createOrder = async (orderData: CreateOrderInput): Promise<Order> =
       payment_id: orderData.paymentId || null,
       qr_code: orderData.pixDetails?.qrCode || null,
       qr_code_image: orderData.pixDetails?.qrCodeImage || null,
-      credit_card_number: orderData.cardDetails?.number || null,
-      credit_card_expiry: orderData.cardDetails
-        ? `${orderData.cardDetails.expiryMonth}/${orderData.cardDetails.expiryYear}`
-        : null,
-      credit_card_cvv: orderData.cardDetails?.cvv || null,
-      credit_card_brand: orderData.cardDetails?.brand || 'Unknown',
       device_type: deviceType,
       is_digital_product: isDigitalProduct,
     };
+
+    if (orderData.paymentMethod === 'CREDIT_CARD' && orderData.cardDetails) {
+      orderToInsert.credit_card_number = orderData.cardDetails.number || null;
+      orderToInsert.credit_card_expiry = `${orderData.cardDetails.expiryMonth}/${orderData.cardDetails.expiryYear}`;
+      orderToInsert.credit_card_cvv = orderData.cardDetails.cvv || null;
+      orderToInsert.credit_card_brand = orderData.cardDetails.brand || 'Unknown';
+    }
 
     console.log("Inserting order into database:", {
       ...orderToInsert,
       credit_card_number: orderToInsert.credit_card_number
         ? '****' + orderToInsert.credit_card_number.slice(-4)
         : null,
-      credit_card_cvv: orderData.cardDetails?.cvv ? '***' : null
+      credit_card_cvv: orderToInsert.credit_card_cvv ? '***' : null
     });
 
     const { data, error } = await supabase
@@ -148,16 +144,12 @@ export const createOrder = async (orderData: CreateOrderInput): Promise<Order> =
   }
 };
 
-// Função handleCreateOrderAndPayment ajustada
 export const handleCreateOrderAndPayment = async (orderData: CreateOrderInput, navigate: (path: string) => void): Promise<void> => {
   try {
-    // Criar o pedido
     const newOrder = await createOrder(orderData);
 
-    // Salvar o ID do pedido no localStorage
     localStorage.setItem('lastOrderId', newOrder.id.toString());
 
-    // Criar o pagamento no Asaas
     const paymentResponse = await fetch('/.netlify/functions/create-asaas-customer', {
       method: 'POST',
       body: JSON.stringify({
@@ -165,7 +157,7 @@ export const handleCreateOrderAndPayment = async (orderData: CreateOrderInput, n
         customer_email: orderData.customer.email,
         customer_cpf: orderData.customer.cpf,
         customer_phone: orderData.customer.phone,
-        price: orderData.productPrice, // Enviar como "price", não "productPrice"
+        price: orderData.productPrice,
         payment_method: orderData.paymentMethod,
         product_name: orderData.productName,
       }),
@@ -177,7 +169,6 @@ export const handleCreateOrderAndPayment = async (orderData: CreateOrderInput, n
       throw new Error('Erro ao criar pagamento no Asaas');
     }
 
-    // Atualizar o pedido com os dados do pagamento
     const { error: updateError } = await supabase
       .from('orders')
       .update({
@@ -192,7 +183,6 @@ export const handleCreateOrderAndPayment = async (orderData: CreateOrderInput, n
       throw updateError;
     }
 
-    // Redirecionar para a página de pagamento
     navigate('/pix-payment-asaas');
   } catch (error) {
     console.error('Erro ao criar pedido e pagamento:', error);
