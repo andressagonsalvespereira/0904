@@ -1,35 +1,17 @@
-import { logger } from '@/utils/logger';
+import { supabase } from '@/integrations/supabase/client';
 
-// services/asaasService.ts (Unificado)
+export const getGlobalAsaasConfig = async (): Promise<{ usar_pix_assas: boolean }> => {
+  const { data, error } = await supabase
+    .from('asaas_config')
+    .select('usar_pix_assas')
+    .order('id', { ascending: false })
+    .limit(1)
+    .single();
 
-// === asaasApiService.ts ===
-// Funções que lidam diretamente com a API do Asaas (fetch, post, etc.)
-export async function asaasGet(endpoint: string) {
-  // implementação simulada
-}
+  if (error || !data) {
+    console.warn('Erro ao buscar configuração do Asaas:', error);
+    return { usar_pix_assas: false };
+  }
 
-export async function asaasPost(endpoint: string, body: any) {
-  // implementação simulada
-}
-
-// === configService.ts ===
-// Lida com configurações da API (como API_KEY)
-export function getApiKey() {
-  // busca do Supabase ou env
-}
-
-// === paymentService.ts ===
-// Criação e cancelamento de cobranças PIX
-export async function criarCobrancaPix(data: any) {
-  // lógica de criação
-}
-
-export async function cancelarCobranca(id: string) {
-  // lógica de cancelamento
-}
-
-// === settingsService.ts ===
-// Lida com leitura e escrita das configurações do painel
-export async function getAsaasSettings() {
-  // busca de settings no Supabase
-}
+  return { usar_pix_assas: !!data.usar_pix_assas };
+};

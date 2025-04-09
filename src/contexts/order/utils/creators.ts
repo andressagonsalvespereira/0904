@@ -1,6 +1,8 @@
 import { Order, CreateOrderInput } from '@/types/order';
 import { supabase } from '@/integrations/supabase/client';
 import { convertDBOrderToOrder } from './converters';
+import { getGlobalAsaasConfig } from '@/services/asaasService';
+
 
 export const createOrder = async (orderData: CreateOrderInput): Promise<Order> => {
   try {
