@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useProducts } from '@/contexts/ProductContext';
 import { useAsaas } from '@/contexts/AsaasContext';
-import { useOrders } from '@/contexts/OrderContext'; // Adicionar contexto para buscar pedidos
+import { useOrders } from '@/contexts/OrderContext';
 import { logger } from '@/utils/logger';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
@@ -14,7 +14,7 @@ const PixPaymentAsaas: React.FC = () => {
   const { productSlug } = useParams<{ productSlug: string }>();
   const { state } = useLocation();
   const { getProductBySlug } = useProducts();
-  const { getOrderById } = useOrders(); // Função para buscar pedido pelo ID
+  const { getOrderById } = useOrders();
   const { settings } = useAsaas();
   const [loading, setLoading] = useState(true);
   const [product, setProduct] = useState<any>(null);
@@ -27,6 +27,7 @@ const PixPaymentAsaas: React.FC = () => {
     const loadProductAndPaymentData = async () => {
       try {
         if (!productSlug) throw new Error("Slug do produto não informado.");
+
         const foundProduct = await getProductBySlug(productSlug);
         if (!foundProduct) throw new Error("Produto não encontrado.");
         setProduct(foundProduct);
@@ -34,28 +35,25 @@ const PixPaymentAsaas: React.FC = () => {
         if (!settings?.asaasApiKey) throw new Error("Chave da API do Asaas não configurada.");
         logger.log("Produto encontrado:", foundProduct);
 
-        // Usar os dados do pedido passados via state
         let orderData = state?.orderData;
-        logger.log("Order data received via state:", orderData);
+        logger.log("Order data via state:", orderData);
 
-        // Se o state.orderData não estiver disponível (ex.: após recarregamento), buscar no Supabase
         if (!orderData || !orderData.pixDetails) {
-          const orderId = localStorage.getItem('lastOrderId'); // Supondo que você salvou o orderId
+          const orderId = localStorage.getItem('lastOrderId');
           if (!orderId) throw new Error("ID do pedido não encontrado.");
-          
+
           const order = await getOrderById(orderId);
           if (!order || !order.pixDetails) {
-            throw new Error("Dados do pagamento PIX não encontrados no Supabase.");
+            throw new Error("Dados do pagamento PIX não encontrados.");
           }
           orderData = order;
         }
 
-        logger.log("PIX details from orderData:", orderData.pixDetails);
+        logger.log("PIX details from order:", orderData.pixDetails);
 
-        // Validar o qrCodeImage
         const qrCodeImage = orderData.pixDetails.qrCodeImage;
         if (!qrCodeImage || !qrCodeImage.startsWith("data:image/")) {
-          logger.warn("qrCodeImage inválido ou ausente, usando fallback:", qrCodeImage);
+          logger.warn("qrCodeImage inválido ou ausente, usando fallback.");
           setUseFallback(true);
         }
 
@@ -65,9 +63,8 @@ const PixPaymentAsaas: React.FC = () => {
             qrCodeImage: qrCodeImage,
           },
         });
-
       } catch (error: any) {
-        logger.error("Erro ao carregar dados do pagamento via Asaas:", error);
+        logger.error("Erro ao carregar dados PIX:", error);
         toast({
           title: "Erro ao carregar cobrança",
           description: error.message || "Não foi possível carregar o pagamento.",
@@ -96,8 +93,6 @@ const PixPaymentAsaas: React.FC = () => {
     return <div className="text-center text-red-500 mt-10">Erro ao carregar cobrança PIX.</div>;
   }
 
-  logger.log("Rendering PIX payment page with data:", paymentData);
-
   return (
     <div className="max-w-lg mx-auto mt-10">
       <Card>
@@ -119,24 +114,30 @@ const PixPaymentAsaas: React.FC = () => {
               src={paymentData.pix.qrCodeImage}
               alt="QR Code PIX"
               className="mx-auto w-60 h-60 border rounded"
-              onError={(e) => {
-                logger.error("Erro ao carregar imagem do QR code:", e);
+              onError={() => {
+                logger.error("Erro ao carregar imagem do QR Code");
                 setUseFallback(true);
               }}
               onLoad={() => logger.log("Imagem do QR code carregada com sucesso.")}
             />
           )}
+
           <div className="text-center">
             <p className="font-semibold">Escaneie o QR Code ou copie o código abaixo:</p>
             <p className="bg-gray-100 p-2 rounded break-all text-sm">{paymentData.pix.payload}</p>
           </div>
+
           <div className="text-center">
             <p className="text-muted-foreground text-sm mt-2">
               Produto: <strong>{product.nome}</strong> — R$ {Number(product.preco).toFixed(2)}
             </p>
           </div>
+
           <div className="flex justify-center">
-            <Button onClick={() => navigator.clipboard.writeText(paymentData.pix.payload)}>
+            <Button onClick={() => {
+              navigator.clipboard.writeText(paymentData.pix.payload);
+              toast({ title: "Código PIX copiado!" });
+            }}>
               Copiar código PIX
             </Button>
           </div>
